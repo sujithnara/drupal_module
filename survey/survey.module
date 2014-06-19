@@ -1,0 +1,273 @@
+<?php
+/**
+ * Implements hook_menu() .
+ */
+function survey_menu() {
+  $items['hello'] = array(
+    'title' => 'Hello world',
+    'description' => 'Welcome text to visitor.',
+    'page callback' => 'display_hello_world',
+    'access callback' => TRUE,
+  );
+  $items['survey'] = array(
+    'title' => 'Survey',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('survey_form'),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/people/survey'] = array(
+    'title' => t('Survey list'),
+    'page callback' => 'survey_table',
+    'access arguments' => array('administer users'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/people/survey/%/delete'] = array(
+    'title' => 'Delete Survey item',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('delete_survey_record_confirm', 3),
+    'access arguments' => array('administer users'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/people/survey/%/update'] = array(
+    'title' => 'Update Survey item',
+    'page callback' => 'form_update',
+    'page arguments' => array(3),
+    'access arguments' => array('administer users'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+function display_hello_world() {
+  return t('hello world');
+}
+
+function survey_form($form, &$form_state, $my_object) {
+  $form['name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name'),
+    '#size' => 40,
+    '#maxlength' => 120,
+    '#required' => TRUE,
+    '#default_value' => isset($my_object['name']) ? $my_object['name'] : '',
+  );
+   $form['email'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Email'),
+    '#required' => TRUE,
+    '#default_value' => "",
+    '#description' => "Please enter your email.",
+    '#maxlength' => 255,
+    '#default_value' => isset($my_object['email']) ? $my_object['email'] : '',
+  );
+  $form['age'] = array(
+    '#type' => 'select',
+    '#title' => t('Age'),
+    '#default_value' => "",
+    '#description' => "Please enter your age.",
+    '#options' => range(18,100),
+    '#default_value' => isset($my_object['age']) ? $my_object['age'] : '',
+  );
+  $form['gender'] = array(
+    '#type' => 'radios',
+    '#title' => t('Gender'),
+    '#description' => "Please mention your gender",
+    '#options' => array('Male' => 'Male', 'Female' => 'Female'),
+    '#default_value' => isset($my_object['gender']) ? $my_object['gender'] : '',
+  );
+  $form['about'] = array(
+    '#type' => 'textarea',
+    '#rows' => 10,
+    '#columns' => 40,
+    '#title' => t('About'),
+    '#default_value' => isset($my_object['about']) ? $my_object['about'] : '',
+  );
+  $form['disclaimer'] = array(
+    '#type' => 'checkbox',
+    '#default_value' => FALSE,
+    '#title' => t('Disclaimer'),
+    '#description' => t("I agree that the information provided above are true to my knowledge."),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+  $form['sid'] = array(
+    '#type' => 'value',
+    '#value' => $my_object['sid'],
+  );
+  return $form;
+}
+
+function survey_form_validate($form, &$form_state) {
+  $email = $form_state['values']['email'];
+  if (!valid_email_address($email)) {
+    form_set_error('email', t('Please Enter a valid email address.'));
+  }
+  $disclaimer = $form_state['values']['disclaimer'];
+  if ($disclaimer == FALSE) {
+    form_set_error('disclaimer', t('Please check the disclaimer'));
+  }
+  $about = $form_state['values']['about'];
+  if (str_word_count($about) < 50) {
+    form_set_error('words', t('Please Enter atleast 50 words'));
+  }
+}
+
+function survey_form_submit($form, &$form_state) {
+  if (isset($form_state['values']['sid'])) {
+  db_update('survey')
+    ->fields(array(
+      'name' => $form_state['values']['name'],
+      'email' => $form_state['values']['email'],
+      'age' => $form_state['values']['age'] + 18,
+      'gender' => $form_state['values']['gender'],
+      'about' => $form_state['values']['about'],
+    ))
+    ->condition('sid', $form_state['values']['sid'])
+    ->execute();
+    drupal_set_message(t('The form has been updated'));
+  }
+  else {
+  db_insert('survey')
+    ->fields(array('name', 'email', 'age', 'gender', 'about'))
+    ->values(array(
+      'name' => $form_state['values']['name'],
+      'email' => $form_state['values']['email'],
+      'age' => $form_state['values']['age'] + 18,
+      'gender' => $form_state['values']['gender'],
+      'about' => $form_state['values']['about'],
+    ))
+    ->execute();
+    drupal_set_message(t('The form has been submitted'));
+    $form_state['redirect'] = "admin/people/survey";
+  }
+}
+
+
+function survey_table() {
+  $query = db_select('survey')
+    ->fields('survey', array('sid', 'name', 'email', 'age', 'gender', 'about'));
+  $result = $query->execute();
+  while($data = $result->fetchAssoc()) {
+    $data['operation'] = l(t('Delete'), 'admin/people/survey/' . $data['sid'] . '/delete');
+    $data['operation'] .= "|";
+    $data['operation'] .= l(t('Update'), 'admin/people/survey/' . $data['sid'] . '/update');
+    $rows[] = array('data' => $data);
+  }
+  $header = array(t('sid'),t('name'),t('email'),t('age'),t('gender'),t('about'),t('delete|update'));
+
+  $output = theme_table(
+    array(
+      "header" => $header,
+      "rows" => $rows,
+      "attributes" => array('rules' => 'rows'),
+      "sticky" => true,
+      "caption" => "",
+      "colgroups" => array(),
+      "empty" => t("Table has no row!")
+    )
+  );
+  return $output;
+}
+
+function delete_survey_record_confirm($form, &$form_state, $sid) {
+  $form['delete'] = array(
+    '#type' => 'value',
+    '#value' => $sid,
+  );
+  return confirm_form(
+    $form,
+    t('Are you sure you want to delete this?'),
+    'admin/people/survey',
+    t('This action cannot be undone'),
+    t('Delete'),
+    t('Cancel')
+  );
+}
+
+function delete_survey_record_confirm_submit($form, &$form_state) {
+  $record = $form_state['values']['delete'];
+  if ($record) {
+    db_delete('survey')
+      ->condition('sid', $record)
+      ->execute();
+    drupal_set_message('The record was deleted');
+  }
+  $form_state['redirect'] = "admin/people/survey";
+}
+
+function form_update($sid) {
+  $s_id = $sid;
+  $my_object = db_select('survey', 'srvy')
+    ->fields('srvy')
+    ->condition('sid', $s_id)
+    ->execute()
+    ->fetchAssoc();
+  return drupal_get_form('survey_form', $my_object);
+}
+
+
+/**
+ * Implements hook_block_info() .
+ */
+function survey_block_info() {
+  $blocks = array();
+  $blocks['recent_record'] = array(
+    'info' => t('A block to view the most recent survey record.'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['user_ip'] = array(
+    'info' => t('A block to show the ip address of logged in user.'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements survey_block_view() .
+ */
+function survey_block_view($block_name = '') {
+  if ($block_name == 'user_ip') {
+    $content = $_SERVER['REMOTE_ADDR'];
+    $block = array(
+        'subject' => t('User IP Address'),
+        'content' => $content
+      );
+    return $block;
+  }
+  if ($block_name == 'recent_record') {
+    $data = db_select('survey')
+      ->fields('survey')
+      ->orderBy('sid', 'DESC')
+      ->range(0,1)
+      ->execute()
+      ->fetchAssoc();
+      $record = array('data' => $data);
+      $content = theme_table(array(
+            "header" => array(t('sid'),t('name'),t('email'),t('age'),t('gender'),t('about')),
+            "rows" => $record,
+            "attributes" => array(),
+            "sticky" => true,
+            "caption" => "",
+            "colgroups" => array(),
+            "empty" => t("Table has no row!")
+          )
+        );
+      $block = array(
+        'subject' => t('Recent survey record'),
+        'content' => $content
+      );
+    return $block;
+  }
+}
+
+/**
+ * Implements hook_user_login() .
+ */
+function survey_user_login(&$edit, $account) {
+  drupal_set_message(t('Hello %name, you have logged in at %time', array('%name' => $account->name, '%time' => format_date($account->login, 'custom', 'd-m-y H:i'))), 'status');
+}
+
+

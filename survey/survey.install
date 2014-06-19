@@ -1,0 +1,34 @@
+<?php
+function survey_schema() {
+  $schema['survey'] = array(
+    'description' => t('Survey Details'),
+    'fields' => array(
+      'sid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE),
+      'email' => array(
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE),
+      'age' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'default' => 0),
+      'gender' => array(
+        'type' => 'varchar',
+        'length' => 8),
+      'about' => array(
+        'type' => 'varchar',
+        'length' => 10000),
+      ),
+      'primary key' => array('sid'),
+  );
+  return $schema;
+}
+?>
+
